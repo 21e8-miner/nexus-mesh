@@ -25,11 +25,23 @@ function connectWS() {
 
     ws.onopen = () => {
         addSystemMessage("Uplink Established.");
+        if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+            Notification.requestPermission();
+        }
     };
 
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         addMessage(data);
+
+        if (data.sender !== 'Me' && document.hidden) {
+            if (Notification.permission === "granted") {
+                new Notification(`nexus: ${data.network}`, {
+                    body: `${data.sender}: ${data.content}`,
+                    icon: '/static/favicon.ico' // Ensure an icon exists or it degrades gracefully
+                });
+            }
+        }
     };
 
     ws.onclose = () => {

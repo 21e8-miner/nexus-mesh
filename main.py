@@ -29,12 +29,19 @@ def init_db():
                   content TEXT,
                   timestamp INTEGER,
                   dest_id TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS local_nodes
+                 (id TEXT PRIMARY KEY,
+                  name TEXT,
+                  hw TEXT,
+                  lat REAL,
+                  lon REAL,
+                  last_heard INTEGER)''')
     conn.commit()
     conn.close()
 
 init_db()
 
-def save_message(msg):
+def save_message_sync(msg):
     conn = sqlite3.connect('nexus.db')
     c = conn.cursor()
     c.execute('INSERT INTO messages (network, sender, content, timestamp, dest_id) VALUES (?, ?, ?, ?, ?)',
@@ -42,13 +49,42 @@ def save_message(msg):
     conn.commit()
     conn.close()
 
-def get_history():
+def save_node(node_id, name="Unknown", hw="Unknown", lat=None, lon=None):
+    conn = sqlite3.connect('nexus.db')
+    c = conn.cursor()
+    c.execute('''INSERT INTO local_nodes (id, name, hw, lat, lon, last_heard) 
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET 
+                 name=COALESCE(?, name), 
+                 hw=COALESCE(?, hw), 
+                 lat=COALESCE(?, lat), 
+                 lon=COALESCE(?, lon), 
+                 last_heard=?''', 
+              (node_id, name, hw, lat, lon, int(time.time()), name, hw, lat, lon, int(time.time())))
+    conn.commit()
+    conn.close()
+
+def get_local_nodes():
+    conn = sqlite3.connect('nexus.db')
+    c = conn.cursor()
+    c.execute('SELECT id, name, hw, lat, lon FROM local_nodes WHERE lat IS NOT NULL AND lon IS NOT NULL')
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'name': r[1], 'hw': r[2], 'lat': r[3], 'lon': r[4]} for r in rows]
+
+async def save_message(msg):
+    await asyncio.to_thread(save_message_sync, msg)
+
+def get_history_sync():
     conn = sqlite3.connect('nexus.db')
     c = conn.cursor()
     c.execute('SELECT network, sender, content, timestamp, dest_id FROM messages ORDER BY timestamp ASC LIMIT 500')
     rows = c.fetchall()
     conn.close()
     return [{'network': r[0], 'sender': r[1], 'content': r[2], 'timestamp': r[3], 'dest_id': r[4]} for r in rows]
+
+async def get_history():
+    return await asyncio.to_thread(get_history_sync)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("NexusChat")
@@ -69,7 +105,7 @@ class MessageBus:
         logger.info(f"Client connected. Total: {len(self.active_connections)}")
         
         # Send history on connect
-        history = get_history()
+        history = await get_history()
         for msg in history:
             await websocket.send_text(json.dumps(msg))
         
@@ -80,7 +116,7 @@ class MessageBus:
             
     async def broadcast(self, message: dict):
         if message.get('sender') != 'Me':  # Only save incoming to avoid duplicates of Me
-            save_message(message)
+            await save_message(message)
             
         text = json.dumps(message)
         for connection in self.active_connections:
@@ -169,7 +205,34 @@ def on_meshtastic_receive(packet, interface):
     except Exception as e:
         logger.error(f"Meshtastic handler error: {e}")
 
+def on_meshtastic_position(packet, interface):
+    try:
+        from_id = packet.get('fromId', 'Unknown')
+        if 'decoded' in packet and 'position' in packet['decoded']:
+            pos = packet['decoded']['position']
+            lat = pos.get('latitude', 0) / 10000000.0 if pos.get('latitude') else None
+            lon = pos.get('longitude', 0) / 10000000.0 if pos.get('longitude') else None
+            if lat and lon:
+                save_node(node_id=from_id, lat=lat, lon=lon)
+                logger.debug(f"Offline GPS Sync: Updated position for node {from_id}")
+    except Exception as e:
+        logger.error(f"Meshtastic position error: {e}")
+
+def on_meshtastic_nodeinfo(packet, interface):
+    try:
+        from_id = packet.get('fromId', 'Unknown')
+        if 'decoded' in packet and 'user' in packet['decoded']:
+            user = packet['decoded']['user']
+            name = user.get('longName', 'Unknown')
+            hw = user.get('hwModel', 'Unknown')
+            save_node(node_id=from_id, name=name, hw=hw)
+            logger.debug(f"Offline NodeInfo Sync: Updated specs for node {from_id}")
+    except Exception as e:
+        logger.error(f"Meshtastic nodeinfo error: {e}")
+
 pub.subscribe(on_meshtastic_receive, "meshtastic.receive.text")
+pub.subscribe(on_meshtastic_position, "meshtastic.receive.position")
+pub.subscribe(on_meshtastic_nodeinfo, "meshtastic.receive.nodeinfo")
 
 def connect_meshtastic():
     global meshtastic_interface
@@ -210,9 +273,14 @@ async def sync_mesh_nodes():
                             'lon': flon
                         })
             
+            # Merge Offline Heard Nodes
+            local_nodes = await asyncio.to_thread(get_local_nodes)
+            local_ids = {n['id'] for n in local_nodes}
+            merged_nodes = [n for n in nodes if n['id'] not in local_ids] + local_nodes
+            
             with open('static/mesh_nodes.json', 'w') as f:
-                json.dump(nodes[:5000], f)
-            logger.info(f"Successfully synced {len(nodes[:5000])} USA nodes.")
+                json.dump(merged_nodes[:5000], f)
+            logger.info(f"Successfully synced {len(merged_nodes[:5000])} combined online/offline topology nodes.")
         except Exception as e:
             logger.error(f"Failed to sync telemetry: {e}")
             
@@ -269,7 +337,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "timestamp": int(time.time()),
                 "dest_id": dest_id
             }
-            save_message(ack_msg)
+            await save_message(ack_msg)
             await bus.broadcast(ack_msg)
             
             network = msg.get("network", "")
