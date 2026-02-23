@@ -143,8 +143,13 @@ def init_reticulum():
     try:
         # Starting Reticulum locally
         reticulum = RNS.Reticulum()
-        # Create an identity
-        lxmf_identity = RNS.Identity()
+        # Create or load an identity
+        import os
+        if os.path.exists("nexus_identity"):
+            lxmf_identity = RNS.Identity.from_file("nexus_identity")
+        else:
+            lxmf_identity = RNS.Identity()
+            lxmf_identity.to_file("nexus_identity")
         # Create an LXMF Router
         lxmf_router = LXMF.LXMRouter(identity=lxmf_identity, storagepath="/tmp/nexus_lxmf")
         lxmf_router.register_delivery_callback(lxmf_delivery_callback)
@@ -231,7 +236,7 @@ def on_meshtastic_nodeinfo(packet, interface):
 
 pub.subscribe(on_meshtastic_receive, "meshtastic.receive.text")
 pub.subscribe(on_meshtastic_position, "meshtastic.receive.position")
-pub.subscribe(on_meshtastic_nodeinfo, "meshtastic.receive.nodeinfo")
+pub.subscribe(on_meshtastic_nodeinfo, "meshtastic.receive.user")
 
 def connect_meshtastic():
     global meshtastic_interface
@@ -260,9 +265,9 @@ def _fetch_liam_nodes():
 async def sync_mesh_nodes():
     while True:
         logger.info("Syncing Mesh telemetry from Liam Cottle API...")
+        nodes = []
         try:
             data = await asyncio.to_thread(_fetch_liam_nodes)
-            nodes = []
             for node in data.get('nodes', []):
                 lat = node.get('latitude')
                 lon = node.get('longitude')
@@ -277,8 +282,11 @@ async def sync_mesh_nodes():
                         'lon': flon,
                         'off_grid': False
                     })
+        except Exception as e:
+            logger.error(f"Failed to sync telemetry from cloud API: {e}")
             
-            # Merge Offline Heard Nodes
+        try:
+            # Always Merge Offline Heard Nodes regardless of Cloud API status
             local_nodes = await asyncio.to_thread(get_local_nodes)
             local_ids = {n['id'] for n in local_nodes}
             merged_nodes = [n for n in nodes if n['id'] not in local_ids] + local_nodes
@@ -287,7 +295,7 @@ async def sync_mesh_nodes():
                 json.dump(merged_nodes[:5000], f)
             logger.info(f"Successfully synced {len(merged_nodes[:5000])} combined online/offline topology nodes.")
         except Exception as e:
-            logger.error(f"Failed to sync telemetry: {e}")
+            logger.error(f"Failed to process offline topography: {e}")
             
         await asyncio.sleep(900)  # Sync every 15 mins
 
