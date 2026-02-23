@@ -297,6 +297,10 @@ async def startup_event():
     logger.info("Meshtastic integration ready for connection.")
 
 
+@app.get("/api/local_nodes")
+async def get_local_nodes_api():
+    return await asyncio.to_thread(get_local_nodes)
+
 @app.get("/api/usb_ports")
 def get_usb_ports():
     ports = serial.tools.list_ports.comports()

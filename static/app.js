@@ -144,21 +144,23 @@ function initMap() {
         .catch(err => console.error("Error loading mesh nodes", err));
 
     // Keep local node visible on top
-    L.circleMarker([40.8482, -73.9976], {
-        color: '#00ffcc',
-        fillColor: '#00ffcc',
-        fillOpacity: 0.8,
-        radius: 10,
-        weight: 2
-    }).bindPopup("<b>RNode / 101</b><br>Heltec V4 (Reticulum L1)<br>Status: Direct Link").addTo(map);
+    const localIcon1 = L.divIcon({
+        className: 'pulse-marker',
+        iconSize: [16, 16],
+        popupAnchor: [0, -8]
+    });
 
-    L.circleMarker([40.8350, -73.9700], {
-        color: '#C471ED',
-        fillColor: '#C471ED',
-        fillOpacity: 0.8,
-        radius: 10,
-        weight: 2
-    }).bindPopup("<b>RNode / 1101</b><br>Heltec V4 (Reticulum L1)<br>Status: Linked").addTo(map);
+    L.marker([40.8482, -73.9976], { icon: localIcon1 })
+        .bindPopup("<b>RNode / 101</b><br>Heltec V4 (Reticulum L1)<br>Status: Direct Link").addTo(map);
+
+    const localIcon2 = L.divIcon({
+        className: 'offline-marker',
+        iconSize: [16, 16],
+        popupAnchor: [0, -8]
+    });
+
+    L.marker([40.8350, -73.9700], { icon: localIcon2 })
+        .bindPopup("<b>RNode / 1101</b><br>Heltec V4 (Reticulum L1)<br>Status: Linked").addTo(map);
 }
 
 const navSettings = document.getElementById('nav-settings');
@@ -192,21 +194,50 @@ function switchView(view) {
         const meshPort = document.getElementById('mesh-port')?.value || "None configured";
         const bridgeEnabled = document.getElementById('omni-cast-toggle')?.checked ? "ACTIVE" : "Disabled";
 
-        nodesContainer.innerHTML = `
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid var(--border-glass);">
+        let html = `
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
                 <strong>Local Primary Interface</strong> - Heltec LoRa32 v4<br>
                 Status: <span style="color:var(--accent);">Active</span><br>
                 Spectrum: 915 MHz L1 Mesh<br>
                 Hardware Path: /dev/cu.usbmodem101<br>
                 Transport Protocol: Reticulum Network Stack (RNS)
             </div>
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid var(--border-glass);">
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
                 <strong>Secondary Carrier Node</strong> - Bridged Appliance<br>
                 Status: <span style="${bridgeEnabled === 'ACTIVE' ? 'color:var(--meshtastic)' : 'color:var(--text-muted)'}">${bridgeEnabled}</span><br>
                 Hardware Access: ${meshPort}<br>
                 Transport Protocol: Meshtastic Serial API
             </div>
+            <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-glass); padding-bottom: 5px;">RF Intercepted Endpoints (Off-Grid)</h3>
+            <div id="local-nodes-grid" style="display: grid; gap: 10px;">
+                <div style="color: var(--text-muted);">Scanning quantum vacuum for active nodes...</div>
+            </div>
         `;
+        nodesContainer.innerHTML = html;
+
+        // Fetch offline local nodes from DB
+        fetch('/api/local_nodes')
+            .then(res => res.json())
+            .then(nodes => {
+                const grid = document.getElementById('local-nodes-grid');
+                if (!grid) return;
+
+                if (nodes.length === 0) {
+                    grid.innerHTML = '<div style="color: var(--text-muted);">No offline nodes detected yet. Waiting for RF broadcasts.</div>';
+                    return;
+                }
+
+                grid.innerHTML = nodes.map(n => `
+                    <div style="background: rgba(0, 0, 0, 0.4); padding: 15px; border-radius: 8px; border-left: 3px solid var(--meshtastic); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong style="font-size: 1.1em;">${n.name}</strong> <span style="font-size: 0.8em; color: var(--text-muted);">[ID: ${n.id}]</span><br>
+                            <span style="font-size: 0.85em; color: var(--text-muted);">HW: ${n.hw} | GPS: ${n.lat.toFixed(4)}, ${n.lon.toFixed(4)}</span>
+                        </div>
+                        <button onclick="targetNode('${n.id}')" style="background: var(--meshtastic); color: #000; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer;">Ping Node</button>
+                    </div>
+                `).join('');
+            })
+            .catch(err => console.error("Error fetching local nodes:", err));
 
     } else if (view === 'settings') {
         navSettings.classList.add('active');
