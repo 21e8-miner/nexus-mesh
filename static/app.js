@@ -210,14 +210,14 @@ function switchView(view) {
                 Transport Protocol: Reticulum Network Stack (RNS)
             </div>
             <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
-                <strong>Secondary Carrier Node</strong> - Bridged Appliance<br>
+                <strong class="glitch-text">Secondary Carrier Node</strong> - Bridged Appliance<br>
                 Status: <span style="${bridgeEnabled === 'ACTIVE' ? 'color:var(--meshtastic)' : 'color:var(--text-muted)'}">${bridgeEnabled}</span><br>
                 Hardware Access: ${meshPort}<br>
                 Transport Protocol: Meshtastic Serial API
             </div>
-            <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-glass); padding-bottom: 5px;">RF Intercepted Endpoints (Off-Grid)</h3>
+            <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-glass); padding-bottom: 5px;" class="glitch-text">RF Intercepted Endpoints (Off-Grid)</h3>
             <div id="local-nodes-grid" style="display: grid; gap: 10px;">
-                <div style="color: var(--text-muted);">Scanning quantum vacuum for active nodes...</div>
+                <div class="cyber-scan">Scanning quantum vacuum for active nodes...</div>
             </div>
         `;
         nodesContainer.innerHTML = html;

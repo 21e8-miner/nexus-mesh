@@ -430,3 +430,64 @@ body {
     border-radius: 50%;
     animation: pulse 3s infinite;
 }
+
+/* CYBERPUNK ENHANCEMENTS */
+
+.cyber-scan {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+}
+
+.cyber-scan::before {
+    content: '';
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.glitch-text {
+    position: relative;
+    color: var(--accent);
+    font-weight: bold;
+    animation: textGlitch 3s infinite;
+}
+
+@keyframes textGlitch {
+    0% {
+        opacity: 1;
+        transform: translate(0);
+    }
+
+    1% {
+        opacity: 0.8;
+        transform: translate(-2px, 1px);
+        color: var(--meshtastic);
+    }
+
+    2% {
+        opacity: 1;
+        transform: translate(2px, -1px);
+        color: var(--rnode);
+    }
+
+    3% {
+        opacity: 1;
+        transform: translate(0);
+        color: var(--accent);
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
