@@ -202,7 +202,18 @@ function switchView(view) {
             .then(res => res.json())
             .then(config => {
                 const meshPort = config.mesh_port || "None configured";
-                const bridgeEnabled = config.omni_cast ? "ACTIVE" : "Disabled";
+                let bridgeStatus = "Disabled";
+                let statusColor = "var(--text-muted)";
+
+                if (config.omni_cast) {
+                    if (config.mesh_port) {
+                        bridgeStatus = "ACTIVE";
+                        statusColor = "var(--meshtastic)";
+                    } else {
+                        bridgeStatus = "AWAITING HARDWARE";
+                        statusColor = "#FFB74D"; // Warning orange
+                    }
+                }
 
                 let html = `
                     <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
@@ -214,7 +225,7 @@ function switchView(view) {
                     </div>
                     <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
                         <strong class="glitch-text">Secondary Carrier Node</strong> - Bridged Appliance<br>
-                        Status: <span style="${bridgeEnabled === 'ACTIVE' ? 'color:var(--meshtastic)' : 'color:var(--text-muted)'}">${bridgeEnabled}</span><br>
+                        Status: <span style="color:${statusColor}">${bridgeStatus}</span><br>
                         Hardware Access: ${meshPort}<br>
                         Transport Protocol: Meshtastic Serial API
                     </div>
