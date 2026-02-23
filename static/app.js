@@ -132,13 +132,20 @@ function initMap() {
         .then(res => res.json())
         .then(nodes => {
             nodes.forEach(node => {
+                const isOffGrid = node.off_grid;
                 L.circleMarker([node.lat, node.lon], {
-                    color: '#12C2E9',
-                    fillColor: '#12C2E9',
-                    fillOpacity: 0.3,
-                    radius: 3,
-                    weight: 1
-                }).bindPopup(`<b>${node.name}</b><br>ID: ${node.id}<br>HW: ${node.hw}<br><button onclick="targetNode('${node.id}')" style="margin-top:8px; padding:4px 8px; background:var(--accent); color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Target Node</button>`).addTo(map);
+                    color: isOffGrid ? '#FF5722' : '#12C2E9',
+                    fillColor: isOffGrid ? '#FFB74D' : '#12C2E9',
+                    fillOpacity: isOffGrid ? 0.7 : 0.3,
+                    radius: isOffGrid ? 6 : 3,
+                    weight: isOffGrid ? 2 : 1
+                }).bindPopup(`
+                    <b>${node.name}</b><br>
+                    ID: ${node.id}<br>
+                    HW: ${node.hw}<br>
+                    Status: <span style="color: ${isOffGrid ? '#FFB74D' : '#12C2E9'};">${isOffGrid ? 'Direct RF Intercept' : 'Cloud Index'}</span><br>
+                    <button onclick="targetNode('${node.id}')" style="margin-top:8px; padding:4px 8px; background:var(--accent); color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">Target Node</button>
+                `).addTo(map);
             });
         })
         .catch(err => console.error("Error loading mesh nodes", err));

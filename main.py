@@ -70,7 +70,7 @@ def get_local_nodes():
     c.execute('SELECT id, name, hw, lat, lon FROM local_nodes WHERE lat IS NOT NULL AND lon IS NOT NULL')
     rows = c.fetchall()
     conn.close()
-    return [{'id': r[0], 'name': r[1], 'hw': r[2], 'lat': r[3], 'lon': r[4]} for r in rows]
+    return [{'id': r[0], 'name': r[1], 'hw': r[2], 'lat': r[3], 'lon': r[4], 'off_grid': True} for r in rows]
 
 async def save_message(msg):
     await asyncio.to_thread(save_message_sync, msg)
@@ -248,15 +248,16 @@ def connect_meshtastic():
     except Exception as e:
         logger.error(f"Meshtastic connection failed: {e}")
 
-@app.on_event("startup")
+def _fetch_liam_nodes():
+    req = urllib.request.Request('https://meshtastic.liamcottle.net/api/v1/nodes', headers={'User-Agent': 'Nexus-Mesh'})
+    with urllib.request.urlopen(req) as response:
+        return json.loads(response.read().decode('utf-8'))
+
 async def sync_mesh_nodes():
     while True:
         logger.info("Syncing Mesh telemetry from Liam Cottle API...")
         try:
-            req = urllib.request.Request('https://meshtastic.liamcottle.net/api/v1/nodes', headers={'User-Agent': 'Nexus-Mesh'})
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode('utf-8'))
-            
+            data = await asyncio.to_thread(_fetch_liam_nodes)
             nodes = []
             for node in data.get('nodes', []):
                 lat = node.get('latitude')
@@ -270,7 +271,8 @@ async def sync_mesh_nodes():
                             'name': node.get('long_name', 'Unknown'),
                             'hw': node.get('hardware_model_name', 'Unknown'),
                             'lat': flat,
-                            'lon': flon
+                            'lon': flon,
+                            'off_grid': False
                         })
             
             # Merge Offline Heard Nodes
