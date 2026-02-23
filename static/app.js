@@ -197,33 +197,37 @@ function switchView(view) {
         viewTitle.innerText = "System Endpoints";
         nodesContainer.style.display = 'block';
 
-        // Populate node view dynamically
-        const meshPort = document.getElementById('mesh-port')?.value || "None configured";
-        const bridgeEnabled = document.getElementById('omni-cast-toggle')?.checked ? "ACTIVE" : "Disabled";
+        // Populate node view dynamically by querying the system backend
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(config => {
+                const meshPort = config.mesh_port || "None configured";
+                const bridgeEnabled = config.omni_cast ? "ACTIVE" : "Disabled";
 
-        let html = `
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
-                <strong>Local Primary Interface</strong> - Heltec LoRa32 v4<br>
-                Status: <span style="color:var(--accent);">Active</span><br>
-                Spectrum: 915 MHz L1 Mesh<br>
-                Hardware Path: /dev/cu.usbmodem101<br>
-                Transport Protocol: Reticulum Network Stack (RNS)
-            </div>
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
-                <strong class="glitch-text">Secondary Carrier Node</strong> - Bridged Appliance<br>
-                Status: <span style="${bridgeEnabled === 'ACTIVE' ? 'color:var(--meshtastic)' : 'color:var(--text-muted)'}">${bridgeEnabled}</span><br>
-                Hardware Access: ${meshPort}<br>
-                Transport Protocol: Meshtastic Serial API
-            </div>
-            <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-glass); padding-bottom: 5px;" class="glitch-text">RF Intercepted Endpoints (Off-Grid)</h3>
-            <div id="local-nodes-grid" style="display: grid; gap: 10px;">
-                <div class="cyber-scan">Scanning quantum vacuum for active nodes...</div>
-            </div>
-        `;
-        nodesContainer.innerHTML = html;
+                let html = `
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
+                        <strong>Local Primary Interface</strong> - Heltec LoRa32 v4<br>
+                        Status: <span style="color:var(--accent);">Active</span><br>
+                        Spectrum: 915 MHz L1 Mesh<br>
+                        Hardware Path: ${config.rnode_port || '/dev/cu.usbmodem101'}<br>
+                        Transport Protocol: Reticulum Network Stack (RNS)
+                    </div>
+                    <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--border-glass);">
+                        <strong class="glitch-text">Secondary Carrier Node</strong> - Bridged Appliance<br>
+                        Status: <span style="${bridgeEnabled === 'ACTIVE' ? 'color:var(--meshtastic)' : 'color:var(--text-muted)'}">${bridgeEnabled}</span><br>
+                        Hardware Access: ${meshPort}<br>
+                        Transport Protocol: Meshtastic Serial API
+                    </div>
+                    <h3 style="margin-bottom: 15px; border-bottom: 1px solid var(--border-glass); padding-bottom: 5px;" class="glitch-text">RF Intercepted Endpoints (Off-Grid)</h3>
+                    <div id="local-nodes-grid" style="display: grid; gap: 10px;">
+                        <div class="cyber-scan">Scanning quantum vacuum for active nodes...</div>
+                    </div>
+                `;
+                nodesContainer.innerHTML = html;
 
-        // Fetch offline local nodes from DB
-        fetch('/api/local_nodes')
+                // Fetch offline local nodes from DB
+                return fetch('/api/local_nodes');
+            })
             .then(res => res.json())
             .then(nodes => {
                 const grid = document.getElementById('local-nodes-grid');
@@ -250,6 +254,17 @@ function switchView(view) {
         navSettings.classList.add('active');
         viewTitle.innerText = "System Configuration";
         settingsContainer.style.display = 'block';
+
+        fetch('/api/config')
+            .then(res => res.json())
+            .then(config => {
+                const meshPortEl = document.getElementById('mesh-port');
+                const rnodePortEl = document.getElementById('rnode-port');
+                const omniCatEl = document.getElementById('omni-cast-toggle');
+                if (meshPortEl) meshPortEl.value = config.mesh_port || "";
+                if (rnodePortEl) rnodePortEl.value = config.rnode_port || "/dev/cu.usbmodem101";
+                if (omniCatEl) omniCatEl.checked = config.omni_cast || false;
+            });
 
         // Auto-detect USB Ports
         fetch('/api/usb_ports')

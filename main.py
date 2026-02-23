@@ -308,6 +308,10 @@ def get_usb_ports():
     ports = serial.tools.list_ports.comports()
     return [{"device": p.device, "description": p.description} for p in ports]
 
+@app.get("/api/config")
+def get_config():
+    return bridge_config
+
 @app.get("/")
 async def get():
     with open("static/index.html") as f:
