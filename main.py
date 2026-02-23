@@ -407,6 +407,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         meshtastic_interface.sendText(content)
                     except Exception as e:
                         logger.error(f"Meshtastic send error: {e}")
+                        
+            # ATAK Pass-Through UI Update
+            if network == "ATAK":
+                logger.info(f"UI submitted ATAK Cursor-on-Target telemetry via WebSocket logic")
+                # In full production, this would bind directly to the local ATAK multicast UDP sock
+                # and emit the payload. For the scope of the Chat interface, we just log it natively.
                 
     except WebSocketDisconnect:
         bus.disconnect(websocket)
