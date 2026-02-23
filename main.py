@@ -129,7 +129,7 @@ bus = MessageBus()
 lxmf_router = None
 lxmf_identity = None
 meshtastic_interface = None
-bridge_lock = threading.Lock()
+bridge_lock = asyncio.Lock()
 bridge_config = {
     "omni_cast": False,
     "rnode_port": "/dev/cu.usbmodem101",
@@ -163,11 +163,10 @@ def lxmf_delivery_callback(message):
     }
     # We must broadcast to websockets from the async loop safely
     if main_loop and main_loop.is_running():
-        asyncio.run_coroutine_threadsafe(bus.broadcast(msg_data), main_loop)
+        main_loop.call_soon_threadsafe(asyncio.create_task, bus.broadcast(msg_data))
         
     # If Omni-Cast Bridge is enabled, we automatically cross-post this to Meshtastic
-    with bridge_lock:
-        omni_cast = bridge_config.get("omni_cast")
+    omni_cast = bridge_config.get("omni_cast")
     if omni_cast and meshtastic_interface:
         logger.info("[OMNI-CAST] Re-broadcasting LXMF receive out to Meshtastic LORA")
         try:
@@ -188,11 +187,10 @@ def on_meshtastic_receive(packet, interface):
                 "timestamp": int(time.time())
             }
             if main_loop and main_loop.is_running():
-                asyncio.run_coroutine_threadsafe(bus.broadcast(msg_data), main_loop)
+                main_loop.call_soon_threadsafe(asyncio.create_task, bus.broadcast(msg_data))
                 
             # Cross-post to Reticulum if Bridge is active
-            with bridge_lock:
-                omni_cast = bridge_config.get("omni_cast")
+            omni_cast = bridge_config.get("omni_cast")
             if omni_cast and lxmf_router:
                 logger.info("[OMNI-CAST] Re-broadcasting Meshtastic receive to Reticulum LXMF")
                 try:
@@ -237,8 +235,7 @@ pub.subscribe(on_meshtastic_nodeinfo, "meshtastic.receive.nodeinfo")
 
 def connect_meshtastic():
     global meshtastic_interface
-    with bridge_lock:
-        port = bridge_config.get("mesh_port")
+    port = bridge_config.get("mesh_port")
     if not port:
         logger.info("Meshtastic: No port configured.")
         return
@@ -296,6 +293,7 @@ async def sync_mesh_nodes():
 
 @app.on_event("startup")
 async def startup_event():
+    # Store reference to main loop
     global main_loop
     main_loop = asyncio.get_running_loop()
     
@@ -318,8 +316,8 @@ def get_usb_ports():
     return [{"device": p.device, "description": p.description} for p in ports]
 
 @app.get("/api/config")
-def get_config():
-    with bridge_lock:
+async def get_config():
+    async with bridge_lock:
         return dict(bridge_config)
 
 @app.get("/")
@@ -340,7 +338,7 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info(f"Received from UI: {msg}")
             if msg.get("type") == "config":
                 needs_reconnect = False
-                with bridge_lock:
+                async with bridge_lock:
                     bridge_config["omni_cast"] = msg.get("omni_cast", False)
                     bridge_config["rnode_port"] = msg.get("rnode_port", "")
                     
