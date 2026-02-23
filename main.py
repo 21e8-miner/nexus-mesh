@@ -129,7 +129,7 @@ bus = MessageBus()
 lxmf_router = None
 lxmf_identity = None
 meshtastic_interface = None
-bridge_lock = asyncio.Lock()
+bridge_lock = threading.Lock()
 bridge_config = {
     "omni_cast": False,
     "rnode_port": "/dev/cu.usbmodem101",
@@ -171,7 +171,8 @@ def lxmf_delivery_callback(message):
         main_loop.call_soon_threadsafe(asyncio.create_task, bus.broadcast(msg_data))
         
     # If Omni-Cast Bridge is enabled, we automatically cross-post this to Meshtastic
-    omni_cast = bridge_config.get("omni_cast")
+    with bridge_lock:
+        omni_cast = bridge_config.get("omni_cast")
     if omni_cast and meshtastic_interface:
         logger.info("[OMNI-CAST] Re-broadcasting LXMF receive out to Meshtastic LORA")
         try:
@@ -195,7 +196,8 @@ def on_meshtastic_receive(packet, interface):
                 main_loop.call_soon_threadsafe(asyncio.create_task, bus.broadcast(msg_data))
                 
             # Cross-post to Reticulum if Bridge is active
-            omni_cast = bridge_config.get("omni_cast")
+            with bridge_lock:
+                omni_cast = bridge_config.get("omni_cast")
             if omni_cast and lxmf_router:
                 logger.info("[OMNI-CAST] Re-broadcasting Meshtastic receive to Reticulum LXMF")
                 try:
@@ -240,7 +242,8 @@ pub.subscribe(on_meshtastic_nodeinfo, "meshtastic.receive.user")
 
 def connect_meshtastic():
     global meshtastic_interface
-    port = bridge_config.get("mesh_port")
+    with bridge_lock:
+        port = bridge_config.get("mesh_port")
     if not port:
         logger.info("Meshtastic: No port configured.")
         return
@@ -324,8 +327,8 @@ def get_usb_ports():
     return [{"device": p.device, "description": p.description} for p in ports]
 
 @app.get("/api/config")
-async def get_config():
-    async with bridge_lock:
+def get_config():
+    with bridge_lock:
         return dict(bridge_config)
 
 @app.get("/")
@@ -346,7 +349,7 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info(f"Received from UI: {msg}")
             if msg.get("type") == "config":
                 needs_reconnect = False
-                async with bridge_lock:
+                with bridge_lock:
                     bridge_config["omni_cast"] = msg.get("omni_cast", False)
                     bridge_config["rnode_port"] = msg.get("rnode_port", "")
                     
