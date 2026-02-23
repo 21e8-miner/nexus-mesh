@@ -202,8 +202,9 @@ def on_meshtastic_receive(packet, interface):
                 logger.info("[OMNI-CAST] Re-broadcasting Meshtastic receive to Reticulum LXMF")
                 try:
                     prop_destination = RNS.Destination(None, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
+                    src_destination = RNS.Destination(lxmf_identity, RNS.Destination.OUT, RNS.Destination.SINGLE, "nexus", "bridge")
                     bridge_msg = f"[Bridged from Meshtastic Node {msg_data['sender']}]: {text}"
-                    message = LXMF.LXMessage(prop_destination, lxmf_router.identity, bridge_msg, title="Nexus Bridge", desired_method=LXMF.LXMessage.DIRECT)
+                    message = LXMF.LXMessage(prop_destination, src_destination, bridge_msg, title="Nexus Bridge", desired_method=LXMF.LXMessage.DIRECT)
                     lxmf_router.handle_outbound(message)
                 except Exception as e:
                     logger.error(f"Failed to bridge Meshtastic to Reticulum: {e}")
@@ -388,7 +389,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     # For a local UI Omni-Cast demo, we broadcast it out over the propagation channel
                     # Setting up a generic propagation delivery for UI tests
                     prop_destination = RNS.Destination(None, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
-                    message = LXMF.LXMessage(prop_destination, lxmf_router.identity, content, title="Nexus Bridge", desired_method=LXMF.LXMessage.DIRECT)
+                    src_destination = RNS.Destination(lxmf_identity, RNS.Destination.OUT, RNS.Destination.SINGLE, "nexus", "bridge")
+                    message = LXMF.LXMessage(prop_destination, src_destination, content, title="Nexus Bridge", desired_method=LXMF.LXMessage.DIRECT)
                     lxmf_router.handle_outbound(message)
                 except Exception as e:
                     logger.error(f"LXMF Send Error: {e}")
