@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Unified Mesh Communicator</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+</head>
+
+<body>
+    <div class="holographic-background"></div>
+    <div class="app-container">
+
+        <aside class="sidebar">
+            <div class="brand">
+                <i data-feather="radio"></i>
+                <h1>Nexus.Mesh</h1>
+            </div>
+
+            <nav class="nav-links">
+                <div class="nav-item active" id="nav-chat">
+                    <i data-feather="message-circle"></i> Unified Chat
+                </div>
+                <div class="nav-item" id="nav-map">
+                    <i data-feather="map-pin"></i> Live Map
+                </div>
+                <div class="nav-item" id="nav-nodes">
+                    <i data-feather="monitor"></i> Nodes
+                </div>
+                <div class="nav-item" id="nav-settings">
+                    <i data-feather="settings"></i> System Settings
+                </div>
+            </nav>
+
+            <div class="network-status">
+                <h3>Active Spectrums</h3>
+                <div class="status-item">
+                    <span class="indicator reticulum"></span> Reticulum (UHF/VHF)
+                </div>
+                <div class="status-item">
+                    <span class="indicator meshtastic"></span> Meshtastic (LoRa)
+                </div>
+                <div class="status-item">
+                    <span class="indicator rnode" style="background:#00ffcc;color:#00ffcc;"></span> Omni-Cast (Bridge)
+                </div>
+            </div>
+
+        </aside>
+
+        <main class="chat-area">
+            <header class="chat-header">
+                <h2 id="view-title">Unified Frequency</h2>
+                <div class="current-hash">ID: 0x91C4...EBe3</div>
+            </header>
+
+            <div class="chat-history" id="chat-history">
+                <!-- Messages will appear here -->
+                <div class="message system">
+                    <div class="content">Nexus Mesh Initialized. Listening on all local networks.</div>
+                </div>
+            </div>
+
+            <!-- Map View Container -->
+            <div id="map-container"
+                style="display: none; flex: 1; min-height: 400px; width: 100%; border-radius: 12px; margin: 20px; z-index: 10;">
+            </div>
+
+            <!-- Nodes View Container -->
+            <div id="nodes-container" style="display: none; flex: 1; margin: 20px; color: var(--text-muted);">
+                <div
+                    style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid var(--border-glass);">
+                    <strong>Local RNode</strong> - Heltec LoRa32 v4<br>
+                    Status: <span style="color:var(--accent);">Active</span> / 860-930MHz
+                </div>
+                <div
+                    style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; margin-bottom: 10px; border: 1px solid var(--border-glass);">
+                    <strong>Meshtastic Gateway</strong> - Unknown<br>
+                    Status: <span style="color:var(--meshtastic);">Standby</span>
+                </div>
+            </div>
+
+            <div id="settings-container"
+                style="display: none; flex: 1; margin: 20px; color: var(--text-main); overflow-y: auto;">
+                <div
+                    style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid var(--border-glass); margin-bottom: 20px;">
+                    <h3 style="margin-bottom: 15px; color: var(--accent);"><i data-feather="cpu"></i> Quantum Bridge
+                        Controller</h3>
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                        Enable Omni-Cast translation. Messages traversing Reticulum nodes are automatically wrapped and
+                        bounced onto the Meshtastic LoRa spectrum in real-time, and vice-versa. True spectrum-agnostic
+                        communication.
+                    </p>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="omni-cast-toggle"
+                            style="width: 20px; height: 20px; accent-color: var(--accent);">
+                        <strong>Enable Omni-Cast Bridge</strong>
+                    </label>
+                </div>
+
+                <div
+                    style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid var(--border-glass);">
+                    <h3 style="margin-bottom: 15px;"><i data-feather="radio"></i> Transceiver Interfaces</h3>
+                    <div style="display: grid; gap: 15px;">
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.85rem;">Hardware
+                                RNode Interface (USB)</label>
+                            <input type="text" id="rnode-port" value="/dev/cu.usbmodem101"
+                                style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white;">
+                        </div>
+                        <div>
+                            <label
+                                style="display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.85rem;">Hardware
+                                Meshtastic Interface (USB/BLE)</label>
+                            <input type="text" id="mesh-port" placeholder="Auto-detect or enter port..."
+                                style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white;">
+                        </div>
+                        <button id="save-settings-btn"
+                            style="padding: 12px; border-radius: 8px; background: var(--accent); color: black; font-weight: bold; border: none; cursor: pointer; margin-top: 10px;">Apply
+                            Core Configuration</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="composer" id="composer">
+                <div class="network-selector">
+                    <select id="network-select">
+                        <option value="Omni-Cast">Omni-Cast (All)</option>
+                        <option value="Reticulum">Reticulum</option>
+                        <option value="Meshtastic">Meshtastic</option>
+                        <option value="VHF">VHF AX.25</option>
+                    </select>
+                </div>
+
+                <input type="text" id="dest-id-input" placeholder="Dest ID (Optional)..." autocomplete="off"
+                    style="max-width: 150px; background: rgba(0,0,0,0.5); border: 1px solid var(--border-glass); color: white; border-radius: 8px; padding: 0 10px; margin-right: 5px;">
+
+                <input type="text" id="message-input" placeholder="Transmit over mesh..." autocomplete="off">
+                <button id="send-btn"><i data-feather="send"></i></button>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        feather.replace();
+    </script>
+</body>
+
+</html>
