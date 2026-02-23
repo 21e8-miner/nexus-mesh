@@ -4,9 +4,6 @@ import logging
 import threading
 import time
 import RNS
-import logging
-import threading
-import RNS
 import LXMF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
@@ -132,11 +129,13 @@ bus = MessageBus()
 lxmf_router = None
 lxmf_identity = None
 meshtastic_interface = None
+bridge_lock = threading.Lock()
 bridge_config = {
     "omni_cast": False,
     "rnode_port": "/dev/cu.usbmodem101",
     "mesh_port": ""
 }
+main_loop = None
 
 def init_reticulum():
     global lxmf_router, lxmf_identity
@@ -163,12 +162,13 @@ def lxmf_delivery_callback(message):
         "timestamp": message.timestamp
     }
     # We must broadcast to websockets from the async loop safely
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        loop.create_task(bus.broadcast(msg_data))
+    if main_loop and main_loop.is_running():
+        asyncio.run_coroutine_threadsafe(bus.broadcast(msg_data), main_loop)
         
     # If Omni-Cast Bridge is enabled, we automatically cross-post this to Meshtastic
-    if bridge_config["omni_cast"] and meshtastic_interface:
+    with bridge_lock:
+        omni_cast = bridge_config.get("omni_cast")
+    if omni_cast and meshtastic_interface:
         logger.info("[OMNI-CAST] Re-broadcasting LXMF receive out to Meshtastic LORA")
         try:
             meshtastic_interface.sendText(f"[Bridge] {msg_data['content']}")
@@ -187,12 +187,13 @@ def on_meshtastic_receive(packet, interface):
                 "content": text,
                 "timestamp": int(time.time())
             }
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(bus.broadcast(msg_data))
+            if main_loop and main_loop.is_running():
+                asyncio.run_coroutine_threadsafe(bus.broadcast(msg_data), main_loop)
                 
             # Cross-post to Reticulum if Bridge is active
-            if bridge_config["omni_cast"] and lxmf_router:
+            with bridge_lock:
+                omni_cast = bridge_config.get("omni_cast")
+            if omni_cast and lxmf_router:
                 logger.info("[OMNI-CAST] Re-broadcasting Meshtastic receive to Reticulum LXMF")
                 try:
                     prop_destination = RNS.Destination(lxmf_identity, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
@@ -236,13 +237,19 @@ pub.subscribe(on_meshtastic_nodeinfo, "meshtastic.receive.nodeinfo")
 
 def connect_meshtastic():
     global meshtastic_interface
-    port = bridge_config["mesh_port"]
+    with bridge_lock:
+        port = bridge_config.get("mesh_port")
     if not port:
         logger.info("Meshtastic: No port configured.")
         return
         
     logger.info(f"Connecting to Meshtastic on {port}...")
     try:
+        if meshtastic_interface:
+            try:
+                meshtastic_interface.close()
+            except Exception:
+                pass
         meshtastic_interface = meshtastic.serial_interface.SerialInterface(devPath=port)
         logger.info("Meshtastic connected!")
     except Exception as e:
@@ -265,15 +272,14 @@ async def sync_mesh_nodes():
                 if lat and lon:
                     flat = lat / 10000000.0
                     flon = lon / 10000000.0
-                    if -130 < flon < -60 and 20 < flat < 55:
-                        nodes.append({
-                            'id': node.get('node_id_hex', 'Unknown'),
-                            'name': node.get('long_name', 'Unknown'),
-                            'hw': node.get('hardware_model_name', 'Unknown'),
-                            'lat': flat,
-                            'lon': flon,
-                            'off_grid': False
-                        })
+                    nodes.append({
+                        'id': node.get('node_id_hex', 'Unknown'),
+                        'name': node.get('long_name', 'Unknown'),
+                        'hw': node.get('hardware_model_name', 'Unknown'),
+                        'lat': flat,
+                        'lon': flon,
+                        'off_grid': False
+                    })
             
             # Merge Offline Heard Nodes
             local_nodes = await asyncio.to_thread(get_local_nodes)
@@ -290,6 +296,9 @@ async def sync_mesh_nodes():
 
 @app.on_event("startup")
 async def startup_event():
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+    
     # Start map scraper loop
     asyncio.create_task(sync_mesh_nodes())
     
@@ -310,12 +319,16 @@ def get_usb_ports():
 
 @app.get("/api/config")
 def get_config():
-    return bridge_config
+    with bridge_lock:
+        return dict(bridge_config)
 
 @app.get("/")
 async def get():
-    with open("static/index.html") as f:
-        return HTMLResponse(f.read())
+    def read_index():
+        with open("static/index.html") as f:
+            return f.read()
+    html_content = await asyncio.to_thread(read_index)
+    return HTMLResponse(html_content)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -326,19 +339,27 @@ async def websocket_endpoint(websocket: WebSocket):
             msg = json.loads(data)
             logger.info(f"Received from UI: {msg}")
             if msg.get("type") == "config":
-                bridge_config["omni_cast"] = msg.get("omni_cast", False)
-                bridge_config["rnode_port"] = msg.get("rnode_port", "")
+                needs_reconnect = False
+                with bridge_lock:
+                    bridge_config["omni_cast"] = msg.get("omni_cast", False)
+                    bridge_config["rnode_port"] = msg.get("rnode_port", "")
+                    
+                    new_mesh_port = msg.get("mesh_port", "")
+                    if new_mesh_port != bridge_config["mesh_port"]:
+                        needs_reconnect = True
+                        bridge_config["mesh_port"] = new_mesh_port
                 
-                new_mesh_port = msg.get("mesh_port", "")
-                if new_mesh_port != bridge_config["mesh_port"]:
-                    bridge_config["mesh_port"] = new_mesh_port
+                if needs_reconnect:
                     t = threading.Thread(target=connect_meshtastic, daemon=True)
                     t.start()
                     
                 logger.info(f"Updated System Config: {bridge_config}")
                 continue
                 
-            # Send message back to UI immediately as ack
+            network = msg.get("network", "")
+            content = msg.get("content", "")
+            dest_id = msg.get("dest_id", "")
+
             # Send message back to UI immediately as ack and save to DB
             ack_msg = {
                 "network": msg.get("network", "Local"),
@@ -349,10 +370,6 @@ async def websocket_endpoint(websocket: WebSocket):
             }
             await save_message(ack_msg)
             await bus.broadcast(ack_msg)
-            
-            network = msg.get("network", "")
-            content = msg.get("content", "")
-            dest_id = msg.get("dest_id", "")
             
             # Omni-Cast / Reticulum
             if (network in ["Reticulum", "Omni-Cast"]) and lxmf_router:
