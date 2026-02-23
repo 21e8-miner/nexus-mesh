@@ -1,6 +1,13 @@
 <div align="center">
   <h1 align="center"><code>NEXUS.MESH</code></h1>
   <p><b>The World's First Unified Cross-Spectrum Mesh Transceiver Topology</b></p>
+  
+  <p>
+    <a href="https://github.com/21e8-miner/nexus-mesh/commits/main"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/21e8-miner/nexus-mesh?color=00ffcc&style=for-the-badge"></a>
+    <a href="https://github.com/21e8-miner/nexus-mesh/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/21e8-miner/nexus-mesh?color=12C2E9&style=for-the-badge"></a>
+    <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10+-blue?color=C471ED&style=for-the-badge&logo=python&logoColor=white">
+    <img alt="License" src="https://img.shields.io/github/license/21e8-miner/nexus-mesh?style=for-the-badge">
+  </p>
 </div>
 
 <br>
