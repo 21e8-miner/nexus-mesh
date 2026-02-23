@@ -201,7 +201,7 @@ def on_meshtastic_receive(packet, interface):
             if omni_cast and lxmf_router:
                 logger.info("[OMNI-CAST] Re-broadcasting Meshtastic receive to Reticulum LXMF")
                 try:
-                    prop_destination = RNS.Destination(lxmf_identity, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
+                    prop_destination = RNS.Destination(None, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
                     bridge_msg = f"[Bridged from Meshtastic Node {msg_data['sender']}]: {text}"
                     message = LXMF.LXMessage(prop_destination, lxmf_router.identity, bridge_msg, title="Nexus Bridge", desired_method=LXMF.LXMessage.DIRECT)
                     lxmf_router.handle_outbound(message)
@@ -387,7 +387,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     # In a true decentralized mesh, you need a destination hash. 
                     # For a local UI Omni-Cast demo, we broadcast it out over the propagation channel
                     # Setting up a generic propagation delivery for UI tests
-                    prop_destination = RNS.Destination(lxmf_identity, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
+                    prop_destination = RNS.Destination(None, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "omnicast")
                     message = LXMF.LXMessage(prop_destination, lxmf_router.identity, content, title="Nexus Bridge", desired_method=LXMF.LXMessage.DIRECT)
                     lxmf_router.handle_outbound(message)
                 except Exception as e:
