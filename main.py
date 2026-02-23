@@ -11,9 +11,44 @@ import LXMF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
+import sqlite3
+import urllib.request
+import serial.tools.list_ports
 import meshtastic
 import meshtastic.serial_interface
 from pubsub import pub
+
+# Initialize DB
+def init_db():
+    conn = sqlite3.connect('nexus.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS messages
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  network TEXT,
+                  sender TEXT,
+                  content TEXT,
+                  timestamp INTEGER,
+                  dest_id TEXT)''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def save_message(msg):
+    conn = sqlite3.connect('nexus.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO messages (network, sender, content, timestamp, dest_id) VALUES (?, ?, ?, ?, ?)',
+              (msg.get('network', 'Local'), msg.get('sender', ''), msg.get('content', ''), int(msg.get('timestamp', time.time())), msg.get('dest_id', '')))
+    conn.commit()
+    conn.close()
+
+def get_history():
+    conn = sqlite3.connect('nexus.db')
+    c = conn.cursor()
+    c.execute('SELECT network, sender, content, timestamp, dest_id FROM messages ORDER BY timestamp ASC LIMIT 500')
+    rows = c.fetchall()
+    conn.close()
+    return [{'network': r[0], 'sender': r[1], 'content': r[2], 'timestamp': r[3], 'dest_id': r[4]} for r in rows]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("NexusChat")
@@ -33,12 +68,20 @@ class MessageBus:
         self.active_connections.append(websocket)
         logger.info(f"Client connected. Total: {len(self.active_connections)}")
         
+        # Send history on connect
+        history = get_history()
+        for msg in history:
+            await websocket.send_text(json.dumps(msg))
+        
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
             logger.info(f"Client disconnected. Total: {len(self.active_connections)}")
             
     async def broadcast(self, message: dict):
+        if message.get('sender') != 'Me':  # Only save incoming to avoid duplicates of Me
+            save_message(message)
+            
         text = json.dumps(message)
         for connection in self.active_connections:
             try:
@@ -143,12 +186,53 @@ def connect_meshtastic():
         logger.error(f"Meshtastic connection failed: {e}")
 
 @app.on_event("startup")
+async def sync_mesh_nodes():
+    while True:
+        logger.info("Syncing Mesh telemetry from Liam Cottle API...")
+        try:
+            req = urllib.request.Request('https://meshtastic.liamcottle.net/api/v1/nodes', headers={'User-Agent': 'Nexus-Mesh'})
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode('utf-8'))
+            
+            nodes = []
+            for node in data.get('nodes', []):
+                lat = node.get('latitude')
+                lon = node.get('longitude')
+                if lat and lon:
+                    flat = lat / 10000000.0
+                    flon = lon / 10000000.0
+                    if -130 < flon < -60 and 20 < flat < 55:
+                        nodes.append({
+                            'id': node.get('node_id_hex', 'Unknown'),
+                            'name': node.get('long_name', 'Unknown'),
+                            'hw': node.get('hardware_model_name', 'Unknown'),
+                            'lat': flat,
+                            'lon': flon
+                        })
+            
+            with open('static/mesh_nodes.json', 'w') as f:
+                json.dump(nodes[:5000], f)
+            logger.info(f"Successfully synced {len(nodes[:5000])} USA nodes.")
+        except Exception as e:
+            logger.error(f"Failed to sync telemetry: {e}")
+            
+        await asyncio.sleep(900)  # Sync every 15 mins
+
+@app.on_event("startup")
 async def startup_event():
+    # Start map scraper loop
+    asyncio.create_task(sync_mesh_nodes())
+    
     # Run Reticulum init in main thread since it requires signal handlers
     init_reticulum()
     # Placeholder for Meshtastic init
     logger.info("Meshtastic integration ready for connection.")
 
+
+@app.get("/api/usb_ports")
+def get_usb_ports():
+    ports = serial.tools.list_ports.comports()
+    return [{"device": p.device, "description": p.description} for p in ports]
 
 @app.get("/")
 async def get():
@@ -177,12 +261,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
                 
             # Send message back to UI immediately as ack
-            await bus.broadcast({
+            # Send message back to UI immediately as ack and save to DB
+            ack_msg = {
                 "network": msg.get("network", "Local"),
                 "sender": "Me",
                 "content": msg.get("content", ""),
-                "timestamp": int(time.time())
-            })
+                "timestamp": int(time.time()),
+                "dest_id": dest_id
+            }
+            save_message(ack_msg)
+            await bus.broadcast(ack_msg)
             
             network = msg.get("network", "")
             content = msg.get("content", "")

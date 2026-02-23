@@ -109,18 +109,19 @@
                     style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; border: 1px solid var(--border-glass);">
                     <h3 style="margin-bottom: 15px;"><i data-feather="radio"></i> Transceiver Interfaces</h3>
                     <div style="display: grid; gap: 15px;">
+                        <datalist id="usb-ports"></datalist>
                         <div>
                             <label
                                 style="display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.85rem;">Hardware
                                 RNode Interface (USB)</label>
-                            <input type="text" id="rnode-port" value="/dev/cu.usbmodem101"
+                            <input type="text" id="rnode-port" value="/dev/cu.usbmodem101" list="usb-ports"
                                 style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white;">
                         </div>
                         <div>
                             <label
                                 style="display: block; margin-bottom: 5px; color: var(--text-muted); font-size: 0.85rem;">Hardware
                                 Meshtastic Interface (USB/BLE)</label>
-                            <input type="text" id="mesh-port" placeholder="Auto-detect or enter port..."
+                            <input type="text" id="mesh-port" placeholder="Auto-detect or pick port..." list="usb-ports"
                                 style="width: 100%; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-glass); color: white;">
                         </div>
                         <button id="save-settings-btn"

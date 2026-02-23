@@ -200,6 +200,23 @@ function switchView(view) {
         navSettings.classList.add('active');
         viewTitle.innerText = "System Configuration";
         settingsContainer.style.display = 'block';
+
+        // Auto-detect USB Ports
+        fetch('/api/usb_ports')
+            .then(res => res.json())
+            .then(ports => {
+                const datalist = document.getElementById('usb-ports');
+                if (datalist) {
+                    datalist.innerHTML = '';
+                    ports.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.device;
+                        opt.text = p.description;
+                        datalist.appendChild(opt);
+                    });
+                }
+            })
+            .catch(err => console.error("Error auto-detecting USB ports", err));
     }
 }
 
