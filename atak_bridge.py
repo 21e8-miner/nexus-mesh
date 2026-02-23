@@ -33,11 +33,10 @@ class ATAKBridge:
             
         # 3. Create a PLAIN destination to broadcast out to the mesh
         # Any node listening on "nexus", "atak" will receive these packets
-        self.bcast_identity = RNS.Identity()
-        self.bcast_destination = RNS.Destination(self.bcast_identity, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "atak")
+        self.bcast_destination = RNS.Destination(None, RNS.Destination.OUT, RNS.Destination.PLAIN, "nexus", "atak")
         
         # 4. Create an IN destination to listen for incoming mesh ATAK packets
-        self.listen_destination = RNS.Destination(self.identity, RNS.Destination.IN, RNS.Destination.PLAIN, "nexus", "atak")
+        self.listen_destination = RNS.Destination(None, RNS.Destination.IN, RNS.Destination.PLAIN, "nexus", "atak")
         self.listen_destination.set_packet_callback(self.receive_rns)
 
         # 5. Setup Local Multicast Socket (Receive from ATAK App)
