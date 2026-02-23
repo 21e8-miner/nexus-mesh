@@ -21,3 +21,4 @@ __pycache__/
 
 # Reticulum temp files
 /tmp/nexus_lxmf/
+nexus.db
